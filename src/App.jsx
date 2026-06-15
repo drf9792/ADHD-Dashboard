@@ -35,6 +35,7 @@ export default function App() {
   const [tasks, setTasks] = useState([])
   const [pipeline, setPipeline] = useState([])
   const [captureText, setCaptureText] = useState('')
+  const [captureBucket, setCaptureBucket] = useState('someday')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -68,11 +69,11 @@ export default function App() {
     if (!text) return
     setCaptureText('')
     const tempId = uid()
-    const newTask = { id: tempId, text, bucket: 'someday', done: false }
+    const newTask = { id: tempId, text, bucket: captureBucket, done: false }
     setTasks((prev) => [...prev, newTask])
     const { data, error } = await supabase
       .from('tasks')
-      .insert({ text, bucket: 'someday', done: false })
+      .insert({ text, bucket: captureBucket, done: false })
       .select()
       .single()
     if (error) {
@@ -80,6 +81,34 @@ export default function App() {
       return
     }
     setTasks((prev) => prev.map((t) => (t.id === tempId ? data : t)))
+  }
+
+  async function addSplitTasks() {
+    const raw = captureText.trim()
+    if (!raw) return
+    const pieces = raw
+      .split(/[\n;]+|,(?=\s)/)
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0)
+
+    if (pieces.length <= 1) {
+      addTask()
+      return
+    }
+
+    setCaptureText('')
+    for (const text of pieces) {
+      const tempId = uid()
+      setTasks((prev) => [...prev, { id: tempId, text, bucket: captureBucket, done: false }])
+      const { data, error } = await supabase
+        .from('tasks')
+        .insert({ text, bucket: captureBucket, done: false })
+        .select()
+        .single()
+      if (!error) {
+        setTasks((prev) => prev.map((t) => (t.id === tempId ? data : t)))
+      }
+    }
   }
 
   async function updateTaskBucket(id, bucket) {
@@ -183,16 +212,28 @@ export default function App() {
       <h1>My Dashboard</h1>
 
       <div className="capture-row">
-        <input
-          type="text"
-          placeholder="Brain dump: type anything, sort it later..."
+        <textarea
+          rows={2}
+          placeholder="Brain dump: paste anything, even long lists separated by commas or new lines..."
           value={captureText}
           onChange={(e) => setCaptureText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && addTask()}
         />
-        <button onClick={addTask}>+ Add</button>
+        <select value={captureBucket} onChange={(e) => setCaptureBucket(e.target.value)}>
+          {BUCKETS.map((b) => (
+            <option key={b.value} value={b.value}>
+              {b.label}
+            </option>
+          ))}
+        </select>
+        <div className="capture-buttons">
+          <button onClick={addTask}>+ Add as one item</button>
+          <button onClick={addSplitTasks}>Split into tasks</button>
+        </div>
       </div>
-      <p className="hint">New items land in "Someday" until you give them a bucket.</p>
+      <p className="hint">
+        "Split into tasks" breaks pasted text into separate items by commas or line breaks —
+        each lands in the bucket you selected, ready to re-sort individually.
+      </p>
 
       <div className="columns">
         {BUCKETS.map((bucket) => {
