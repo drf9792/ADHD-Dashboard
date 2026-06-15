@@ -87,7 +87,7 @@ export default function App() {
     const raw = captureText.trim()
     if (!raw) return
     const pieces = raw
-      .split(/[\n;]+|,(?=\s)/)
+      .split(/\r?\n+|;+|,\s*/)
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
 
