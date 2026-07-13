@@ -24,6 +24,12 @@ function formatDate(iso) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+function formatDateTime(iso) {
+  const d = new Date(iso)
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+}
+
 function daysUntil(iso) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -38,6 +44,7 @@ export default function App() {
   const [captureBucket, setCaptureBucket] = useState('someday')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [showCompleted, setShowCompleted] = useState(false)
 
   useEffect(() => {
     loadAll()
@@ -69,17 +76,14 @@ export default function App() {
     if (!text) return
     setCaptureText('')
     const tempId = uid()
-    const newTask = { id: tempId, text, bucket: captureBucket, done: false }
+    const newTask = { id: tempId, text, bucket: captureBucket, done: false, completed_at: null }
     setTasks((prev) => [...prev, newTask])
     const { data, error } = await supabase
       .from('tasks')
-      .insert({ text, bucket: captureBucket, done: false })
+      .insert({ text, bucket: captureBucket, done: false, completed_at: null })
       .select()
       .single()
-    if (error) {
-      console.error(error)
-      return
-    }
+    if (error) { console.error(error); return }
     setTasks((prev) => prev.map((t) => (t.id === tempId ? data : t)))
   }
 
@@ -91,18 +95,15 @@ export default function App() {
       .map((s) => s.trim())
       .filter((s) => s.length > 0)
 
-    if (pieces.length <= 1) {
-      addTask()
-      return
-    }
+    if (pieces.length <= 1) { addTask(); return }
 
     setCaptureText('')
     for (const text of pieces) {
       const tempId = uid()
-      setTasks((prev) => [...prev, { id: tempId, text, bucket: captureBucket, done: false }])
+      setTasks((prev) => [...prev, { id: tempId, text, bucket: captureBucket, done: false, completed_at: null }])
       const { data, error } = await supabase
         .from('tasks')
-        .insert({ text, bucket: captureBucket, done: false })
+        .insert({ text, bucket: captureBucket, done: false, completed_at: null })
         .select()
         .single()
       if (!error) {
@@ -111,14 +112,15 @@ export default function App() {
     }
   }
 
+  async function toggleTaskDone(id, done) {
+    const completed_at = done ? new Date().toISOString() : null
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done, completed_at } : t)))
+    await supabase.from('tasks').update({ done, completed_at }).eq('id', id)
+  }
+
   async function updateTaskBucket(id, bucket) {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, bucket } : t)))
     await supabase.from('tasks').update({ bucket }).eq('id', id)
-  }
-
-  async function toggleTaskDone(id, done) {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done } : t)))
-    await supabase.from('tasks').update({ done }).eq('id', id)
   }
 
   async function deleteTask(id) {
@@ -129,24 +131,14 @@ export default function App() {
   // ---- Pipeline ----
   async function addPipelineEntry() {
     const tempId = uid()
-    const newEntry = {
-      id: tempId,
-      name: '',
-      follow_up_date: null,
-      next_action: '',
-      notes: '',
-      contact_log: [],
-    }
+    const newEntry = { id: tempId, name: '', follow_up_date: null, next_action: '', notes: '', contact_log: [] }
     setPipeline((prev) => [...prev, newEntry])
     const { data, error } = await supabase
       .from('pipeline')
       .insert({ name: '', next_action: '', notes: '', contact_log: [] })
       .select()
       .single()
-    if (error) {
-      console.error(error)
-      return
-    }
+    if (error) { console.error(error); return }
     setPipeline((prev) => prev.map((p) => (p.id === tempId ? data : p)))
   }
 
@@ -188,16 +180,13 @@ export default function App() {
     await supabase.from('pipeline').update({ contact_log: updatedLog }).eq('id', id)
   }
 
-  if (loading) {
-    return <div className="container"><p>Loading your dashboard...</p></div>
-  }
+  if (loading) return <div className="container"><p>Loading your dashboard...</p></div>
 
   if (error) {
     return (
       <div className="container">
         <p className="error">
-          Couldn't load data: {error}
-          <br />
+          Couldn't load data: {error}<br />
           Check that VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set correctly,
           and that the schema has been run.
         </p>
@@ -205,7 +194,9 @@ export default function App() {
     )
   }
 
-  const sortedTasks = [...tasks].sort((a, b) => (a.done ? 1 : 0) - (b.done ? 1 : 0))
+  const activeTasks = tasks.filter((t) => !t.done)
+  const completedTasks = tasks.filter((t) => t.done)
+    .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
 
   return (
     <div className="container">
@@ -220,9 +211,7 @@ export default function App() {
         />
         <select value={captureBucket} onChange={(e) => setCaptureBucket(e.target.value)}>
           {BUCKETS.map((b) => (
-            <option key={b.value} value={b.value}>
-              {b.label}
-            </option>
+            <option key={b.value} value={b.value}>{b.label}</option>
           ))}
         </select>
         <div className="capture-buttons">
@@ -237,7 +226,7 @@ export default function App() {
 
       <div className="columns">
         {BUCKETS.map((bucket) => {
-          const items = sortedTasks.filter((t) => t.bucket === bucket.value)
+          const items = activeTasks.filter((t) => t.bucket === bucket.value)
           return (
             <div key={bucket.value} className={`column col-${bucket.value}`}>
               <p className="column-title">{bucket.label}</p>
@@ -249,20 +238,13 @@ export default function App() {
                     checked={!!t.done}
                     onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
                   />
-                  <span className={t.done ? 'task-text done' : 'task-text'}>{t.text}</span>
-                  <select
-                    value={t.bucket}
-                    onChange={(e) => updateTaskBucket(t.id, e.target.value)}
-                  >
+                  <span className="task-text">{t.text}</span>
+                  <select value={t.bucket} onChange={(e) => updateTaskBucket(t.id, e.target.value)}>
                     {BUCKETS.map((b) => (
-                      <option key={b.value} value={b.value}>
-                        {b.label}
-                      </option>
+                      <option key={b.value} value={b.value}>{b.label}</option>
                     ))}
                   </select>
-                  <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">
-                    ✕
-                  </button>
+                  <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
                 </div>
               ))}
             </div>
@@ -270,6 +252,33 @@ export default function App() {
         })}
       </div>
 
+      {/* Completed Section */}
+      <div className="completed-section">
+        <button className="completed-toggle" onClick={() => setShowCompleted(!showCompleted)}>
+          {showCompleted ? '▾' : '▸'} Completed ({completedTasks.length})
+        </button>
+        {showCompleted && (
+          <div className="completed-list">
+            {completedTasks.length === 0 && <p className="empty">Nothing completed yet.</p>}
+            {completedTasks.map((t) => (
+              <div key={t.id} className="task-row completed-row">
+                <input
+                  type="checkbox"
+                  checked={true}
+                  onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
+                />
+                <span className="task-text done">{t.text}</span>
+                <span className="completed-at">
+                  {t.completed_at ? formatDateTime(t.completed_at) : ''}
+                </span>
+                <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Recruiting Pipeline */}
       <div className="pipeline-section">
         <div className="pipeline-header">
           <p className="section-title">Recruiting pipeline</p>
@@ -324,23 +333,16 @@ export default function App() {
               <p className="log-label">Contact log</p>
               <div className="log-buttons">
                 {CONTACT_TYPES.map((ct) => (
-                  <button
-                    key={ct.value}
-                    className="log-btn"
-                    onClick={() => addContactLog(p.id, ct.value, ct.label)}
-                  >
+                  <button key={ct.value} className="log-btn"
+                    onClick={() => addContactLog(p.id, ct.value, ct.label)}>
                     {ct.label}
                   </button>
                 ))}
               </div>
               {(p.contact_log || []).map((entry) => (
                 <div key={entry.id} className="log-entry">
-                  <span>
-                    {formatDate(entry.date)} — {entry.label}
-                  </span>
-                  <button className="icon-btn" onClick={() => removeContactLog(p.id, entry.id)} aria-label="Remove">
-                    ✕
-                  </button>
+                  <span>{formatDate(entry.date)} — {entry.label}</span>
+                  <button className="icon-btn" onClick={() => removeContactLog(p.id, entry.id)} aria-label="Remove">✕</button>
                 </div>
               ))}
             </div>
