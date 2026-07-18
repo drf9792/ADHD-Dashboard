@@ -26,8 +26,11 @@ function formatDate(iso) {
 
 function formatDateTime(iso) {
   const d = new Date(iso)
-  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
-    ' at ' + d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  return (
+    d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) +
+    ' at ' +
+    d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  )
 }
 
 function daysUntil(iso) {
@@ -37,11 +40,15 @@ function daysUntil(iso) {
   return Math.round((due - today) / 86400000)
 }
 
-// ── Auth Screen ──────────────────────────────────────────────────────────────
+function isDone(val) {
+  return val === true || val === 'true' || val === 1
+}
+
+// ── Auth Screen ───────────────────────────────────────────────────────────────
 function AuthScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [mode, setMode] = useState('login') // 'login' | 'signup'
+  const [mode, setMode] = useState('login')
   const [message, setMessage] = useState(null)
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -73,42 +80,27 @@ function AuthScreen() {
       <div className="auth-card">
         <h1>My Dashboard</h1>
         <p className="auth-subtitle">Sign in to access your tasks and recruiting pipeline.</p>
-
         <button className="google-btn" onClick={handleGoogle}>
-          <svg width="18" height="18" viewBox="0 0 48 48" style={{marginRight: 8}}>
+          <svg width="18" height="18" viewBox="0 0 48 48" style={{ marginRight: 8 }}>
             <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
             <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
             <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
             <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-            <path fill="none" d="M0 0h48v48H0z"/>
           </svg>
           Continue with Google
         </button>
-
         <div className="auth-divider"><span>or</span></div>
-
-        <input
-          type="email"
-          placeholder="Email address"
-          value={email}
+        <input type="email" placeholder="Email address" value={email}
           onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()} />
+        <input type="password" placeholder="Password" value={password}
           onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-        />
-
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()} />
         {error && <p className="auth-error">{error}</p>}
         {message && <p className="auth-message">{message}</p>}
-
         <button className="auth-submit" onClick={handleSubmit} disabled={loading}>
           {loading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
         </button>
-
         <p className="auth-toggle">
           {mode === 'login' ? (
             <>Don't have an account? <button onClick={() => setMode('signup')}>Sign up</button></>
@@ -121,9 +113,9 @@ function AuthScreen() {
   )
 }
 
-// ── Main App ─────────────────────────────────────────────────────────────────
+// ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [session, setSession] = useState(undefined) // undefined = loading
+  const [session, setSession] = useState(undefined)
   const [tasks, setTasks] = useState([])
   const [pipeline, setPipeline] = useState([])
   const [captureText, setCaptureText] = useState('')
@@ -170,7 +162,7 @@ export default function App() {
     setPipeline([])
   }
 
-  // ---- Tasks ----
+  // ── Tasks ─────────────────────────────────────────────────────────────────
   async function addTask() {
     const text = captureText.trim()
     if (!text) return
@@ -197,18 +189,18 @@ export default function App() {
       const tempId = uid()
       setTasks((prev) => [...prev, { id: tempId, text, bucket: captureBucket, done: false, completed_at: null, user_id }])
       const { data, error } = await supabase
-        .from('tasks')
-        .insert({ text, bucket: captureBucket, done: false, completed_at: null, user_id })
+        .from('tasks').insert({ text, bucket: captureBucket, done: false, completed_at: null, user_id })
         .select().single()
       if (!error) setTasks((prev) => prev.map((t) => (t.id === tempId ? data : t)))
     }
   }
 
-  async function toggleTaskDone(id, done) {
-    const completed_at = done ? new Date().toISOString() : null
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: done, completed_at: completed_at } : t)))
-    await supabase.from('tasks').update({ done: done, completed_at: completed_at }).eq('id', id)
-  
+  async function toggleTaskDone(id, checked) {
+    const completed_at = checked ? new Date().toISOString() : null
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, done: checked, completed_at } : t))
+    )
+    await supabase.from('tasks').update({ done: checked, completed_at }).eq('id', id)
   }
 
   async function updateTaskBucket(id, bucket) {
@@ -221,14 +213,13 @@ export default function App() {
     await supabase.from('tasks').delete().eq('id', id)
   }
 
-  // ---- Pipeline ----
+  // ── Pipeline ──────────────────────────────────────────────────────────────
   async function addPipelineEntry() {
     const user_id = session.user.id
     const tempId = uid()
     setPipeline((prev) => [...prev, { id: tempId, name: '', follow_up_date: null, next_action: '', notes: '', contact_log: [], user_id }])
     const { data, error } = await supabase
-      .from('pipeline')
-      .insert({ name: '', next_action: '', notes: '', contact_log: [], user_id })
+      .from('pipeline').insert({ name: '', next_action: '', notes: '', contact_log: [], user_id })
       .select().single()
     if (error) { console.error(error); return }
     setPipeline((prev) => prev.map((p) => (p.id === tempId ? data : p)))
@@ -268,21 +259,16 @@ export default function App() {
     await supabase.from('pipeline').update({ contact_log: updatedLog }).eq('id', id)
   }
 
-  // ── Render ───────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   if (session === undefined) return <div className="container"><p>Loading...</p></div>
   if (!session) return <AuthScreen />
-
   if (loading) return <div className="container"><p>Loading your dashboard...</p></div>
+  if (error) return <div className="container"><p className="error">Couldn't load data: {error}</p></div>
 
-  if (error) return (
-    <div className="container">
-      <p className="error">Couldn't load data: {error}</p>
-    </div>
-  )
-
-  const activeTasks = tasks.filter((t) => !t.done || t.done === 'false')
-const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
-  .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
+  const activeTasks = tasks.filter((t) => !isDone(t.done))
+  const completedTasks = tasks
+    .filter((t) => isDone(t.done))
+    .sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0))
 
   return (
     <div className="container">
@@ -294,13 +280,12 @@ const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
         </div>
       </div>
 
+      {/* Brain dump */}
       <div className="capture-row">
-        <textarea
-          rows={2}
+        <textarea rows={2}
           placeholder="Brain dump: paste anything, even long lists separated by commas or new lines..."
           value={captureText}
-          onChange={(e) => setCaptureText(e.target.value)}
-        />
+          onChange={(e) => setCaptureText(e.target.value)} />
         <select value={captureBucket} onChange={(e) => setCaptureBucket(e.target.value)}>
           {BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
         </select>
@@ -314,6 +299,7 @@ const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
         each lands in the bucket you selected, ready to re-sort individually.
       </p>
 
+      {/* Active task columns */}
       <div className="columns">
         {BUCKETS.map((bucket) => {
           const items = activeTasks.filter((t) => t.bucket === bucket.value)
@@ -323,7 +309,8 @@ const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
               {items.length === 0 && <p className="empty">Nothing here yet.</p>}
               {items.map((t) => (
                 <div key={t.id} className="task-row">
-                  <input type="checkbox" checked={!!t.done} onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
+                  <input type="checkbox" checked={false}
+                    onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
                   <span className="task-text">{t.text}</span>
                   <select value={t.bucket} onChange={(e) => updateTaskBucket(t.id, e.target.value)}>
                     {BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
@@ -336,6 +323,7 @@ const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
         })}
       </div>
 
+      {/* Completed section */}
       <div className="completed-section">
         <button className="completed-toggle" onClick={() => setShowCompleted(!showCompleted)}>
           {showCompleted ? '▾' : '▸'} Completed ({completedTasks.length})
@@ -345,9 +333,12 @@ const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
             {completedTasks.length === 0 && <p className="empty">Nothing completed yet.</p>}
             {completedTasks.map((t) => (
               <div key={t.id} className="task-row completed-row">
-                <input type="checkbox" checked={true} onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
+                <input type="checkbox" checked={true}
+                  onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
                 <span className="task-text done">{t.text}</span>
-                <span className="completed-at">{t.completed_at ? formatDateTime(t.completed_at) : ''}</span>
+                <span className="completed-at">
+                  {t.completed_at ? formatDateTime(t.completed_at) : ''}
+                </span>
                 <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
               </div>
             ))}
@@ -355,6 +346,7 @@ const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
         )}
       </div>
 
+      {/* Recruiting pipeline */}
       <div className="pipeline-section">
         <div className="pipeline-header">
           <p className="section-title">Recruiting pipeline</p>
@@ -364,38 +356,40 @@ const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
         {pipeline.map((p) => (
           <div key={p.id} className="pipeline-card">
             <div className="pipeline-top-row">
-              <input
-                type="text" className="pipeline-name" placeholder="Candidate / role"
+              <input type="text" className="pipeline-name" placeholder="Candidate / role"
                 value={p.name || ''}
                 onChange={(e) => updatePipelineField(p.id, 'name', e.target.value)}
-                onBlur={(e) => commitPipelineField(p.id, 'name', e.target.value)}
-              />
+                onBlur={(e) => commitPipelineField(p.id, 'name', e.target.value)} />
               <div className="date-field">
                 <label>Follow-up date</label>
                 <input type="date" value={p.follow_up_date || ''}
-                  onChange={(e) => { updatePipelineField(p.id, 'follow_up_date', e.target.value); commitPipelineField(p.id, 'follow_up_date', e.target.value || null) }}
-                />
+                  onChange={(e) => {
+                    updatePipelineField(p.id, 'follow_up_date', e.target.value)
+                    commitPipelineField(p.id, 'follow_up_date', e.target.value || null)
+                  }} />
               </div>
             </div>
             <input type="text" placeholder="Next action" value={p.next_action || ''}
               onChange={(e) => updatePipelineField(p.id, 'next_action', e.target.value)}
-              onBlur={(e) => commitPipelineField(p.id, 'next_action', e.target.value)}
-            />
+              onBlur={(e) => commitPipelineField(p.id, 'next_action', e.target.value)} />
             <textarea placeholder="Notes" rows={1} value={p.notes || ''}
               onChange={(e) => updatePipelineField(p.id, 'notes', e.target.value)}
-              onBlur={(e) => commitPipelineField(p.id, 'notes', e.target.value)}
-            />
+              onBlur={(e) => commitPipelineField(p.id, 'notes', e.target.value)} />
             <div className="contact-log">
               <p className="log-label">Contact log</p>
               <div className="log-buttons">
                 {CONTACT_TYPES.map((ct) => (
-                  <button key={ct.value} className="log-btn" onClick={() => addContactLog(p.id, ct.value, ct.label)}>{ct.label}</button>
+                  <button key={ct.value} className="log-btn"
+                    onClick={() => addContactLog(p.id, ct.value, ct.label)}>
+                    {ct.label}
+                  </button>
                 ))}
               </div>
               {(p.contact_log || []).map((entry) => (
                 <div key={entry.id} className="log-entry">
                   <span>{formatDate(entry.date)} — {entry.label}</span>
-                  <button className="icon-btn" onClick={() => removeContactLog(p.id, entry.id)} aria-label="Remove">✕</button>
+                  <button className="icon-btn"
+                    onClick={() => removeContactLog(p.id, entry.id)} aria-label="Remove">✕</button>
                 </div>
               ))}
             </div>
