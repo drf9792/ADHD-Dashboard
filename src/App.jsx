@@ -206,8 +206,9 @@ export default function App() {
 
   async function toggleTaskDone(id, done) {
     const completed_at = done ? new Date().toISOString() : null
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done, completed_at } : t)))
-    await supabase.from('tasks').update({ done, completed_at }).eq('id', id)
+    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, done: done, completed_at: completed_at } : t)))
+    await supabase.from('tasks').update({ done: done, completed_at: completed_at }).eq('id', id)
+  
   }
 
   async function updateTaskBucket(id, bucket) {
