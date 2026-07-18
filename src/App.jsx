@@ -194,12 +194,15 @@ export default function App() {
       if (!error) setTasks((prev) => prev.map((t) => (t.id === tempId ? data : t)))
     }
   }
-async function toggleTaskDone(id, checked) {
+
+  async function toggleTaskDone(id, checked) {
     const completed_at = checked ? new Date().toISOString() : null
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, done: checked, completed_at } : t))
+    )
     await supabase.from('tasks').update({ done: checked, completed_at }).eq('id', id)
-    await loadAll()
   }
-  
+
   async function updateTaskBucket(id, bucket) {
     setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, bucket } : t)))
     await supabase.from('tasks').update({ bucket }).eq('id', id)
@@ -321,8 +324,7 @@ async function toggleTaskDone(id, checked) {
       </div>
 
       {/* Completed section */}
-<p>Debug: {completedTasks.length} completed tasks</p>
-<div className="completed-section">
+      <div className="completed-section">
         <button className="completed-toggle" onClick={() => setShowCompleted(!showCompleted)}>
           {showCompleted ? '▾' : '▸'} Completed ({completedTasks.length})
         </button>
