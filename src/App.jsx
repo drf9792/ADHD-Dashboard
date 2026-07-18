@@ -37,7 +37,93 @@ function daysUntil(iso) {
   return Math.round((due - today) / 86400000)
 }
 
+// ── Auth Screen ──────────────────────────────────────────────────────────────
+function AuthScreen() {
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [mode, setMode] = useState('login') // 'login' | 'signup'
+  const [message, setMessage] = useState(null)
+  const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit() {
+    setLoading(true)
+    setError(null)
+    setMessage(null)
+    if (mode === 'login') {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) setError(error.message)
+    } else {
+      const { error } = await supabase.auth.signUp({ email, password })
+      if (error) setError(error.message)
+      else setMessage('Check your email for a confirmation link.')
+    }
+    setLoading(false)
+  }
+
+  async function handleGoogle() {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    })
+  }
+
+  return (
+    <div className="auth-container">
+      <div className="auth-card">
+        <h1>My Dashboard</h1>
+        <p className="auth-subtitle">Sign in to access your tasks and recruiting pipeline.</p>
+
+        <button className="google-btn" onClick={handleGoogle}>
+          <svg width="18" height="18" viewBox="0 0 48 48" style={{marginRight: 8}}>
+            <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+            <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+            <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
+            <path fill="none" d="M0 0h48v48H0z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        <div className="auth-divider"><span>or</span></div>
+
+        <input
+          type="email"
+          placeholder="Email address"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+        />
+
+        {error && <p className="auth-error">{error}</p>}
+        {message && <p className="auth-message">{message}</p>}
+
+        <button className="auth-submit" onClick={handleSubmit} disabled={loading}>
+          {loading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'}
+        </button>
+
+        <p className="auth-toggle">
+          {mode === 'login' ? (
+            <>Don't have an account? <button onClick={() => setMode('signup')}>Sign up</button></>
+          ) : (
+            <>Already have an account? <button onClick={() => setMode('login')}>Sign in</button></>
+          )}
+        </p>
+      </div>
+    </div>
+  )
+}
+
+// ── Main App ─────────────────────────────────────────────────────────────────
 export default function App() {
+  const [session, setSession] = useState(undefined) // undefined = loading
   const [tasks, setTasks] = useState([])
   const [pipeline, setPipeline] = useState([])
   const [captureText, setCaptureText] = useState('')
@@ -47,8 +133,16 @@ export default function App() {
   const [showCompleted, setShowCompleted] = useState(false)
 
   useEffect(() => {
-    loadAll()
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+    })
+    return () => subscription.unsubscribe()
   }, [])
+
+  useEffect(() => {
+    if (session) loadAll()
+  }, [session])
 
   async function loadAll() {
     setLoading(true)
@@ -70,19 +164,24 @@ export default function App() {
     }
   }
 
+  async function signOut() {
+    await supabase.auth.signOut()
+    setTasks([])
+    setPipeline([])
+  }
+
   // ---- Tasks ----
   async function addTask() {
     const text = captureText.trim()
     if (!text) return
     setCaptureText('')
+    const user_id = session.user.id
     const tempId = uid()
-    const newTask = { id: tempId, text, bucket: captureBucket, done: false, completed_at: null }
-    setTasks((prev) => [...prev, newTask])
+    setTasks((prev) => [...prev, { id: tempId, text, bucket: captureBucket, done: false, completed_at: null, user_id }])
     const { data, error } = await supabase
       .from('tasks')
-      .insert({ text, bucket: captureBucket, done: false, completed_at: null })
-      .select()
-      .single()
+      .insert({ text, bucket: captureBucket, done: false, completed_at: null, user_id })
+      .select().single()
     if (error) { console.error(error); return }
     setTasks((prev) => prev.map((t) => (t.id === tempId ? data : t)))
   }
@@ -90,25 +189,18 @@ export default function App() {
   async function addSplitTasks() {
     const raw = captureText.trim()
     if (!raw) return
-    const pieces = raw
-      .split(/\r?\n+|;+|,\s*/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0)
-
+    const pieces = raw.split(/\r?\n+|;+|,\s*/).map((s) => s.trim()).filter((s) => s.length > 0)
     if (pieces.length <= 1) { addTask(); return }
-
     setCaptureText('')
+    const user_id = session.user.id
     for (const text of pieces) {
       const tempId = uid()
-      setTasks((prev) => [...prev, { id: tempId, text, bucket: captureBucket, done: false, completed_at: null }])
+      setTasks((prev) => [...prev, { id: tempId, text, bucket: captureBucket, done: false, completed_at: null, user_id }])
       const { data, error } = await supabase
         .from('tasks')
-        .insert({ text, bucket: captureBucket, done: false, completed_at: null })
-        .select()
-        .single()
-      if (!error) {
-        setTasks((prev) => prev.map((t) => (t.id === tempId ? data : t)))
-      }
+        .insert({ text, bucket: captureBucket, done: false, completed_at: null, user_id })
+        .select().single()
+      if (!error) setTasks((prev) => prev.map((t) => (t.id === tempId ? data : t)))
     }
   }
 
@@ -130,14 +222,13 @@ export default function App() {
 
   // ---- Pipeline ----
   async function addPipelineEntry() {
+    const user_id = session.user.id
     const tempId = uid()
-    const newEntry = { id: tempId, name: '', follow_up_date: null, next_action: '', notes: '', contact_log: [] }
-    setPipeline((prev) => [...prev, newEntry])
+    setPipeline((prev) => [...prev, { id: tempId, name: '', follow_up_date: null, next_action: '', notes: '', contact_log: [], user_id }])
     const { data, error } = await supabase
       .from('pipeline')
-      .insert({ name: '', next_action: '', notes: '', contact_log: [] })
-      .select()
-      .single()
+      .insert({ name: '', next_action: '', notes: '', contact_log: [], user_id })
+      .select().single()
     if (error) { console.error(error); return }
     setPipeline((prev) => prev.map((p) => (p.id === tempId ? data : p)))
   }
@@ -158,41 +249,35 @@ export default function App() {
   async function addContactLog(id, type, label) {
     const entry = { id: uid(), type, label, date: new Date().toISOString().slice(0, 10) }
     let updatedLog
-    setPipeline((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p
-        updatedLog = [entry, ...(p.contact_log || [])]
-        return { ...p, contact_log: updatedLog }
-      })
-    )
+    setPipeline((prev) => prev.map((p) => {
+      if (p.id !== id) return p
+      updatedLog = [entry, ...(p.contact_log || [])]
+      return { ...p, contact_log: updatedLog }
+    }))
     await supabase.from('pipeline').update({ contact_log: updatedLog }).eq('id', id)
   }
 
   async function removeContactLog(id, entryId) {
     let updatedLog
-    setPipeline((prev) =>
-      prev.map((p) => {
-        if (p.id !== id) return p
-        updatedLog = (p.contact_log || []).filter((e) => e.id !== entryId)
-        return { ...p, contact_log: updatedLog }
-      })
-    )
+    setPipeline((prev) => prev.map((p) => {
+      if (p.id !== id) return p
+      updatedLog = (p.contact_log || []).filter((e) => e.id !== entryId)
+      return { ...p, contact_log: updatedLog }
+    }))
     await supabase.from('pipeline').update({ contact_log: updatedLog }).eq('id', id)
   }
 
+  // ── Render ───────────────────────────────────────────────────────────────
+  if (session === undefined) return <div className="container"><p>Loading...</p></div>
+  if (!session) return <AuthScreen />
+
   if (loading) return <div className="container"><p>Loading your dashboard...</p></div>
 
-  if (error) {
-    return (
-      <div className="container">
-        <p className="error">
-          Couldn't load data: {error}<br />
-          Check that VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY are set correctly,
-          and that the schema has been run.
-        </p>
-      </div>
-    )
-  }
+  if (error) return (
+    <div className="container">
+      <p className="error">Couldn't load data: {error}</p>
+    </div>
+  )
 
   const activeTasks = tasks.filter((t) => !t.done)
   const completedTasks = tasks.filter((t) => t.done)
@@ -200,7 +285,13 @@ export default function App() {
 
   return (
     <div className="container">
-      <h1>My Dashboard</h1>
+      <div className="app-header">
+        <h1>My Dashboard</h1>
+        <div className="user-info">
+          <span>{session.user.email}</span>
+          <button onClick={signOut}>Sign out</button>
+        </div>
+      </div>
 
       <div className="capture-row">
         <textarea
@@ -210,9 +301,7 @@ export default function App() {
           onChange={(e) => setCaptureText(e.target.value)}
         />
         <select value={captureBucket} onChange={(e) => setCaptureBucket(e.target.value)}>
-          {BUCKETS.map((b) => (
-            <option key={b.value} value={b.value}>{b.label}</option>
-          ))}
+          {BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
         </select>
         <div className="capture-buttons">
           <button onClick={addTask}>+ Add as one item</button>
@@ -233,16 +322,10 @@ export default function App() {
               {items.length === 0 && <p className="empty">Nothing here yet.</p>}
               {items.map((t) => (
                 <div key={t.id} className="task-row">
-                  <input
-                    type="checkbox"
-                    checked={!!t.done}
-                    onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
-                  />
+                  <input type="checkbox" checked={!!t.done} onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
                   <span className="task-text">{t.text}</span>
                   <select value={t.bucket} onChange={(e) => updateTaskBucket(t.id, e.target.value)}>
-                    {BUCKETS.map((b) => (
-                      <option key={b.value} value={b.value}>{b.label}</option>
-                    ))}
+                    {BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
                   </select>
                   <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
                 </div>
@@ -252,7 +335,6 @@ export default function App() {
         })}
       </div>
 
-      {/* Completed Section */}
       <div className="completed-section">
         <button className="completed-toggle" onClick={() => setShowCompleted(!showCompleted)}>
           {showCompleted ? '▾' : '▸'} Completed ({completedTasks.length})
@@ -262,15 +344,9 @@ export default function App() {
             {completedTasks.length === 0 && <p className="empty">Nothing completed yet.</p>}
             {completedTasks.map((t) => (
               <div key={t.id} className="task-row completed-row">
-                <input
-                  type="checkbox"
-                  checked={true}
-                  onChange={(e) => toggleTaskDone(t.id, e.target.checked)}
-                />
+                <input type="checkbox" checked={true} onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
                 <span className="task-text done">{t.text}</span>
-                <span className="completed-at">
-                  {t.completed_at ? formatDateTime(t.completed_at) : ''}
-                </span>
+                <span className="completed-at">{t.completed_at ? formatDateTime(t.completed_at) : ''}</span>
                 <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
               </div>
             ))}
@@ -278,65 +354,41 @@ export default function App() {
         )}
       </div>
 
-      {/* Recruiting Pipeline */}
       <div className="pipeline-section">
         <div className="pipeline-header">
           <p className="section-title">Recruiting pipeline</p>
           <button onClick={addPipelineEntry}>+ Add candidate / role</button>
         </div>
-
-        {pipeline.length === 0 && (
-          <p className="empty">No candidates or roles tracked yet. Add one to get started.</p>
-        )}
-
+        {pipeline.length === 0 && <p className="empty">No candidates or roles tracked yet.</p>}
         {pipeline.map((p) => (
           <div key={p.id} className="pipeline-card">
             <div className="pipeline-top-row">
               <input
-                type="text"
-                className="pipeline-name"
-                placeholder="Candidate / role"
+                type="text" className="pipeline-name" placeholder="Candidate / role"
                 value={p.name || ''}
                 onChange={(e) => updatePipelineField(p.id, 'name', e.target.value)}
                 onBlur={(e) => commitPipelineField(p.id, 'name', e.target.value)}
               />
               <div className="date-field">
                 <label>Follow-up date</label>
-                <input
-                  type="date"
-                  value={p.follow_up_date || ''}
-                  onChange={(e) => {
-                    updatePipelineField(p.id, 'follow_up_date', e.target.value)
-                    commitPipelineField(p.id, 'follow_up_date', e.target.value || null)
-                  }}
+                <input type="date" value={p.follow_up_date || ''}
+                  onChange={(e) => { updatePipelineField(p.id, 'follow_up_date', e.target.value); commitPipelineField(p.id, 'follow_up_date', e.target.value || null) }}
                 />
               </div>
             </div>
-
-            <input
-              type="text"
-              placeholder="Next action"
-              value={p.next_action || ''}
+            <input type="text" placeholder="Next action" value={p.next_action || ''}
               onChange={(e) => updatePipelineField(p.id, 'next_action', e.target.value)}
               onBlur={(e) => commitPipelineField(p.id, 'next_action', e.target.value)}
             />
-
-            <textarea
-              placeholder="Notes"
-              rows={1}
-              value={p.notes || ''}
+            <textarea placeholder="Notes" rows={1} value={p.notes || ''}
               onChange={(e) => updatePipelineField(p.id, 'notes', e.target.value)}
               onBlur={(e) => commitPipelineField(p.id, 'notes', e.target.value)}
             />
-
             <div className="contact-log">
               <p className="log-label">Contact log</p>
               <div className="log-buttons">
                 {CONTACT_TYPES.map((ct) => (
-                  <button key={ct.value} className="log-btn"
-                    onClick={() => addContactLog(p.id, ct.value, ct.label)}>
-                    {ct.label}
-                  </button>
+                  <button key={ct.value} className="log-btn" onClick={() => addContactLog(p.id, ct.value, ct.label)}>{ct.label}</button>
                 ))}
               </div>
               {(p.contact_log || []).map((entry) => (
@@ -346,7 +398,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-
             <div className="pipeline-bottom-row">
               <span className={dueLabelClass(p.follow_up_date)}>{dueLabelText(p.follow_up_date)}</span>
               <button onClick={() => deletePipelineEntry(p.id)}>Remove</button>
