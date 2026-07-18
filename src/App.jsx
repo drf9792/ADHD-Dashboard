@@ -320,8 +320,9 @@ async function toggleTaskDone(id, checked) {
         })}
       </div>
 
-      {/* Completed section */}
-      <div className="completed-section">
+      {{/* Completed section */}
+<p>Debug: {completedTasks.length} completed tasks</p>
+<div className="completed-section">
         <button className="completed-toggle" onClick={() => setShowCompleted(!showCompleted)}>
           {showCompleted ? '▾' : '▸'} Completed ({completedTasks.length})
         </button>
