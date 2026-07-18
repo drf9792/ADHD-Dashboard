@@ -280,9 +280,9 @@ export default function App() {
     </div>
   )
 
-  const activeTasks = tasks.filter((t) => !t.done)
-  const completedTasks = tasks.filter((t) => t.done)
-    .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
+  const activeTasks = tasks.filter((t) => !t.done || t.done === 'false')
+const completedTasks = tasks.filter((t) => t.done === true || t.done === 'true')
+  .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at))
 
   return (
     <div className="container">
