@@ -81,7 +81,7 @@ button:hover {
 
 .columns {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
   margin-bottom: 2rem;
 }
@@ -365,3 +365,59 @@ textarea {
 }
 .col-business { background: #e9f6ec; }
 .col-marketing { background: #fdf1e3; }
+
+.col-business { background: #e9f6ec; }
+.col-marketing { background: #fdf1e3; }
+
+.move-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.move-btn {
+  padding: 2px 6px;
+  font-size: 13px;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.move-btn:hover { background: #f0f0f2; }
+
+.move-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+}
+
+.move-menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  margin-top: 4px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.12);
+  z-index: 11;
+  min-width: 160px;
+  overflow: hidden;
+}
+
+.move-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 13px;
+  background: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.move-item:hover { background: #f5f5f7; }
+.move-item.active { font-weight: 600; color: var(--info); 
+                  
+}
