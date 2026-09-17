@@ -17,6 +17,8 @@ const CONTACT_TYPES = [
   { value: 'call_connected', label: 'Called - connected' },
 ]
 
+const HIDDEN_KEY = 'dash-hidden-buckets'
+
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
@@ -71,6 +73,39 @@ function MoveMenu({ current, onMove }) {
                 {b.label}
               </button>
             ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Columns menu (checklist to show/hide columns) ──────────────────────────────
+function ColumnsMenu({ hidden, onToggle }) {
+  const [open, setOpen] = useState(false)
+  const shownCount = BUCKETS.length - hidden.length
+  return (
+    <div className="cols-wrap">
+      <button className="cols-btn" onClick={() => setOpen(!open)}>
+        Columns ({shownCount}/{BUCKETS.length}) ▾
+      </button>
+      {open && (
+        <>
+          <div className="move-backdrop" onClick={() => setOpen(false)} />
+          <div className="cols-menu">
+            {BUCKETS.map((b) => {
+              const visible = !hidden.includes(b.value)
+              return (
+                <label key={b.value} className="cols-item">
+                  <input
+                    type="checkbox"
+                    checked={visible}
+                    onChange={() => onToggle(b.value)}
+                  />
+                  <span>{b.label}</span>
+                </label>
+              )
+            })}
           </div>
         </>
       )}
@@ -158,6 +193,18 @@ export default function App() {
   const [error, setError] = useState(null)
   const [showCompleted, setShowCompleted] = useState(false)
   const [dragOverBucket, setDragOverBucket] = useState(null)
+  const [hidden, setHidden] = useState(() => {
+    try {
+      const raw = localStorage.getItem(HIDDEN_KEY)
+      return raw ? JSON.parse(raw) : []
+    } catch {
+      return []
+    }
+  })
+
+  useEffect(() => {
+    try { localStorage.setItem(HIDDEN_KEY, JSON.stringify(hidden)) } catch {}
+  }, [hidden])
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
@@ -195,6 +242,12 @@ export default function App() {
     await supabase.auth.signOut()
     setTasks([])
     setPipeline([])
+  }
+
+  function toggleHidden(value) {
+    setHidden((prev) =>
+      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+    )
   }
 
   // ── Tasks ──────────────────────────────────────────────────────────────────
@@ -317,6 +370,7 @@ export default function App() {
   const completedTasks = tasks
     .filter((t) => isDone(t.done))
     .sort((a, b) => new Date(b.completed_at || 0) - new Date(a.completed_at || 0))
+  const visibleBuckets = BUCKETS.filter((b) => !hidden.includes(b.value))
 
   return (
     <div className="container">
@@ -342,43 +396,62 @@ export default function App() {
           <button onClick={addSplitTasks}>Split into tasks</button>
         </div>
       </div>
-      <p className="hint">
-        Drag a card between columns, or use the ⇄ icon to move it. "Split into tasks" breaks
-        pasted text into separate items by commas or line breaks.
-      </p>
+
+      <div className="toolbar-row">
+        <p className="hint" style={{ margin: 0 }}>
+          Drag a card between columns, or use the ⇄ icon to move it.
+        </p>
+        <ColumnsMenu hidden={hidden} onToggle={toggleHidden} />
+      </div>
 
       {/* Active task columns */}
-      <div className="columns">
-        {BUCKETS.map((bucket) => {
-          const items = activeTasks.filter((t) => t.bucket === bucket.value)
-          return (
-            <div
-              key={bucket.value}
-              className={`column col-${bucket.value}${dragOverBucket === bucket.value ? ' drag-over' : ''}`}
-              onDragOver={(e) => { e.preventDefault(); setDragOverBucket(bucket.value) }}
-              onDragLeave={() => setDragOverBucket((b) => (b === bucket.value ? null : b))}
-              onDrop={(e) => onDrop(e, bucket.value)}
-            >
-              <p className="column-title">{bucket.label}</p>
-              {items.length === 0 && <p className="empty">Nothing here yet.</p>}
-              {items.map((t) => (
-                <div
-                  key={t.id}
-                  className="task-row"
-                  draggable
-                  onDragStart={(e) => onDragStart(e, t.id)}
-                >
-                  <input type="checkbox" checked={false}
-                    onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
-                  <span className="task-text">{t.text}</span>
-                  <MoveMenu current={t.bucket} onMove={(b) => updateTaskBucket(t.id, b)} />
-                  <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
+      {visibleBuckets.length === 0 ? (
+        <p className="empty" style={{ margin: '1rem 0 2rem' }}>
+          All columns hidden. Use "Columns" above to show some.
+        </p>
+      ) : (
+        <div className="columns">
+          {visibleBuckets.map((bucket) => {
+            const items = activeTasks.filter((t) => t.bucket === bucket.value)
+            return (
+              <div
+                key={bucket.value}
+                className={`column col-${bucket.value}${dragOverBucket === bucket.value ? ' drag-over' : ''}`}
+                onDragOver={(e) => { e.preventDefault(); setDragOverBucket(bucket.value) }}
+                onDragLeave={() => setDragOverBucket((b) => (b === bucket.value ? null : b))}
+                onDrop={(e) => onDrop(e, bucket.value)}
+              >
+                <div className="column-head">
+                  <p className="column-title">{bucket.label}</p>
+                  <button
+                    className="hide-col-btn"
+                    aria-label={`Hide ${bucket.label}`}
+                    title="Hide this column"
+                    onClick={() => toggleHidden(bucket.value)}
+                  >
+                    ×
+                  </button>
                 </div>
-              ))}
-            </div>
-          )
-        })}
-      </div>
+                {items.length === 0 && <p className="empty">Nothing here yet.</p>}
+                {items.map((t) => (
+                  <div
+                    key={t.id}
+                    className="task-row"
+                    draggable
+                    onDragStart={(e) => onDragStart(e, t.id)}
+                  >
+                    <input type="checkbox" checked={false}
+                      onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
+                    <span className="task-text">{t.text}</span>
+                    <MoveMenu current={t.bucket} onMove={(b) => updateTaskBucket(t.id, b)} />
+                    <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Completed section */}
       <div className="completed-section">
