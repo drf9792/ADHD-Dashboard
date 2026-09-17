@@ -2,10 +2,12 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 
 const BUCKETS = [
-  { value: 'today', label: 'Today' },
-  { value: 'week', label: 'This week' },
-  { value: 'nextweek', label: 'Next week' },
-  { value: 'someday', label: 'Someday' },
+  { value: 'today', label: 'Do It Now' },
+  { value: 'week', label: 'Do It Next' },
+  { value: 'nextweek', label: 'Personal' },
+  { value: 'someday', label: 'Medicare Ideas' },
+  { value: 'business', label: 'Business Ideas' },
+  { value: 'marketing', label: 'Marketing Submissions' },
 ]
 
 const CONTACT_TYPES = [
