@@ -363,3 +363,5 @@ textarea {
   padding: 0;
   font-size: 13px;
 }
+.col-business { background: #e9f6ec; }
+.col-marketing { background: #fdf1e3; }
