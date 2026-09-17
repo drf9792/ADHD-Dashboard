@@ -46,7 +46,39 @@ function isDone(val) {
   return val === true || val === 'true' || val === 1
 }
 
-// ── Auth Screen ───────────────────────────────────────────────────────────────
+// ── Move menu (compact arrow that opens a bucket picker) ───────────────────────
+function MoveMenu({ current, onMove }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="move-wrap">
+      <button
+        className="move-btn"
+        aria-label="Move to another list"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open) }}
+      >
+        ⇄
+      </button>
+      {open && (
+        <>
+          <div className="move-backdrop" onClick={() => setOpen(false)} />
+          <div className="move-menu">
+            {BUCKETS.map((b) => (
+              <button
+                key={b.value}
+                className={b.value === current ? 'move-item active' : 'move-item'}
+                onClick={() => { onMove(b.value); setOpen(false) }}
+              >
+                {b.label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
+// ── Auth Screen ────────────────────────────────────────────────────────────────
 function AuthScreen() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -115,7 +147,7 @@ function AuthScreen() {
   )
 }
 
-// ── Main App ──────────────────────────────────────────────────────────────────
+// ── Main App ───────────────────────────────────────────────────────────────────
 export default function App() {
   const [session, setSession] = useState(undefined)
   const [tasks, setTasks] = useState([])
@@ -125,6 +157,7 @@ export default function App() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [showCompleted, setShowCompleted] = useState(false)
+  const [dragOverBucket, setDragOverBucket] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
@@ -164,7 +197,7 @@ export default function App() {
     setPipeline([])
   }
 
-  // ── Tasks ─────────────────────────────────────────────────────────────────
+  // ── Tasks ──────────────────────────────────────────────────────────────────
   async function addTask() {
     const text = captureText.trim()
     if (!text) return
@@ -215,7 +248,20 @@ export default function App() {
     await supabase.from('tasks').delete().eq('id', id)
   }
 
-  // ── Pipeline ──────────────────────────────────────────────────────────────
+  // ── Drag and drop ──────────────────────────────────────────────────────────
+  function onDragStart(e, id) {
+    e.dataTransfer.setData('text/plain', id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  function onDrop(e, bucket) {
+    e.preventDefault()
+    const id = e.dataTransfer.getData('text/plain')
+    setDragOverBucket(null)
+    if (id) updateTaskBucket(id, bucket)
+  }
+
+  // ── Pipeline ───────────────────────────────────────────────────────────────
   async function addPipelineEntry() {
     const user_id = session.user.id
     const tempId = uid()
@@ -261,7 +307,7 @@ export default function App() {
     await supabase.from('pipeline').update({ contact_log: updatedLog }).eq('id', id)
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────
   if (session === undefined) return <div className="container"><p>Loading...</p></div>
   if (!session) return <AuthScreen />
   if (loading) return <div className="container"><p>Loading your dashboard...</p></div>
@@ -297,8 +343,8 @@ export default function App() {
         </div>
       </div>
       <p className="hint">
-        "Split into tasks" breaks pasted text into separate items by commas or line breaks —
-        each lands in the bucket you selected, ready to re-sort individually.
+        Drag a card between columns, or use the ⇄ icon to move it. "Split into tasks" breaks
+        pasted text into separate items by commas or line breaks.
       </p>
 
       {/* Active task columns */}
@@ -306,17 +352,26 @@ export default function App() {
         {BUCKETS.map((bucket) => {
           const items = activeTasks.filter((t) => t.bucket === bucket.value)
           return (
-            <div key={bucket.value} className={`column col-${bucket.value}`}>
+            <div
+              key={bucket.value}
+              className={`column col-${bucket.value}${dragOverBucket === bucket.value ? ' drag-over' : ''}`}
+              onDragOver={(e) => { e.preventDefault(); setDragOverBucket(bucket.value) }}
+              onDragLeave={() => setDragOverBucket((b) => (b === bucket.value ? null : b))}
+              onDrop={(e) => onDrop(e, bucket.value)}
+            >
               <p className="column-title">{bucket.label}</p>
               {items.length === 0 && <p className="empty">Nothing here yet.</p>}
               {items.map((t) => (
-                <div key={t.id} className="task-row">
+                <div
+                  key={t.id}
+                  className="task-row"
+                  draggable
+                  onDragStart={(e) => onDragStart(e, t.id)}
+                >
                   <input type="checkbox" checked={false}
                     onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
                   <span className="task-text">{t.text}</span>
-                  <select value={t.bucket} onChange={(e) => updateTaskBucket(t.id, e.target.value)}>
-                    {BUCKETS.map((b) => <option key={b.value} value={b.value}>{b.label}</option>)}
-                  </select>
+                  <MoveMenu current={t.bucket} onMove={(b) => updateTaskBucket(t.id, b)} />
                   <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
                 </div>
               ))}
@@ -338,9 +393,7 @@ export default function App() {
                 <input type="checkbox" checked={true}
                   onChange={(e) => toggleTaskDone(t.id, e.target.checked)} />
                 <span className="task-text done">{t.text}</span>
-                <span className="completed-at">
-                  {t.completed_at ? formatDateTime(t.completed_at) : ''}
-                </span>
+                <span className="completed-at">{t.completed_at ? formatDateTime(t.completed_at) : ''}</span>
                 <button className="icon-btn" onClick={() => deleteTask(t.id)} aria-label="Delete">✕</button>
               </div>
             ))}
